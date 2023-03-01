@@ -40,6 +40,7 @@ class UsrCanetBus(BusABC):
                 self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.s.connect((host, port))
                 self.connected = True
+
             except socket.error as e:
                 self.connected = False
                 logging.error(f"Could not connect: {e}. Retrying...")
@@ -98,6 +99,7 @@ class UsrCanetBus(BusABC):
                 logging.error("Reconnecting...")
                 self.s.close()
                 self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.s.settimeout(self.reconnect_delay)
                 self.s.connect((self.host, self.port))
                 self.connected = True
                 logging.error("Reconnected.")
@@ -123,6 +125,15 @@ class UsrCanetBus(BusABC):
                 # But sometimes will return TCP packets with 2 CAN packets sandwiched together
                 # This will seperate the sandwich.
                 data = self.s.recv(13)
+                # Instead of a socket error when disconnected we seem to simply get empty data packets. Since a actual message should always be 13 bytes assume connection is dead if data is empty 
+                if data == b'': 
+                    self.connected = False
+                    if self.reconnect():
+                        self.do_reconnect()
+                    else:
+                        self.s.settimeout(None)
+                        return(None, False)
+
                 flag_success = True
             except TimeoutError:
                 self.s.settimeout(None)
